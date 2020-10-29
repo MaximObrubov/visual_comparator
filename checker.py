@@ -49,10 +49,14 @@ class CheckScreenshots(unittest.TestCase):
                 w = params["width"]
                 taragetpath = self.imagepath('targets', page, w)
                 etalonpath = self.imagepath('etalons', page, w)
-                etalon = Image.open(etalonpath)
                 
-                params = breakpoints._sections[section]
-                width, height = etalon.size
+                try:
+                    with Image.open(etalonpath) as etalon:
+                        width, height = etalon.size
+                except Exception as e:
+                    width = w
+                    height = params["height"]
+                
                 driver.get(url)
                 driver.set_window_size(width, height)
                 sleep(1.4)
@@ -60,7 +64,9 @@ class CheckScreenshots(unittest.TestCase):
                 element = driver.find_element_by_css_selector('body')
                 self.save_screenshot_from_element(taragetpath, element)
                 result = self.compare_images(taragetpath, etalonpath)
-                result.save(self.imagepath('results', page, w))
+                
+                if result:
+                    result.save(self.imagepath('results', page, w))
             
     
     def imagepath(self, type, page, breakpoint):
@@ -77,17 +83,25 @@ class CheckScreenshots(unittest.TestCase):
             screenshot.write(element.screenshot_as_png)
             
     def compare_images(self, im_1, im_2):
-        etalon = Image.open(im_1)
-        target = ImageOps.invert(Image.open(im_2).convert('RGB'))
-        etalon.putalpha(128)
-        target.convert('RGBA')
-        target.putalpha(128)
-        return Image.alpha_composite(etalon, target)
+        with Image.open(im_1) as etalon:
+            with Image.open(im_2) as target:
+                target.convert('RGB')
+                target = ImageOps.invert(target.convert('RGB'))
+                target = target.convert('RGBA')
+                
+                if etalon.size.height > target.size.height:
+                    target = target.resize(etalon.size)
+                else:
+                    etalon = etalon.resize(target.size)
+                target.putalpha(128)
+                etalon.putalpha(150)
+                result = Image.alpha_composite(etalon, target)
+            return result
+        return None
         
 
     def tearDown(self):
-        print("tearDown")
-        # self.driver.close()
+        self.driver.close()
 
 if __name__ == "__main__":
     unittest.main()
