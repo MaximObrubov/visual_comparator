@@ -3,7 +3,7 @@ import configparser
 import shutil
 from os import path, makedirs, rmdir
 from time import sleep
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageChops
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
@@ -49,13 +49,9 @@ class CheckScreenshots(unittest.TestCase):
                 w = params["width"]
                 taragetpath = self.imagepath('targets', page, w)
                 etalonpath = self.imagepath('etalons', page, w)
-                
-                try:
-                    with Image.open(etalonpath) as etalon:
-                        width, height = etalon.size
-                except Exception as e:
-                    width = w
-                    height = params["height"]
+
+                with Image.open(etalonpath) as etalon:
+                    width, height = etalon.size
                 
                 driver.get(url)
                 driver.set_window_size(width, height)
@@ -63,7 +59,7 @@ class CheckScreenshots(unittest.TestCase):
                 
                 element = driver.find_element_by_css_selector('body')
                 self.save_screenshot_from_element(taragetpath, element)
-                result = self.compare_images(taragetpath, etalonpath)
+                result = self.alpha_inversed_diff(taragetpath, etalonpath)
                 
                 if result:
                     result.save(self.imagepath('results', page, w))
@@ -82,21 +78,30 @@ class CheckScreenshots(unittest.TestCase):
         with open(savepath, 'w+b') as screenshot:
             screenshot.write(element.screenshot_as_png)
             
-    def compare_images(self, im_1, im_2):
+    def alpha_inversed_diff(self, im_1, im_2):
         with Image.open(im_1) as etalon:
             with Image.open(im_2) as target:
                 target.convert('RGB')
                 target = ImageOps.invert(target.convert('RGB'))
                 target = target.convert('RGBA')
-                
-                if etalon.size.height > target.size.height:
+
+                if etalon.size[1] > target.size[1]:
                     target = target.resize(etalon.size)
                 else:
                     etalon = etalon.resize(target.size)
                 target.putalpha(128)
-                etalon.putalpha(150)
-                result = Image.alpha_composite(etalon, target)
-            return result
+                return Image.alpha_composite(etalon, target)
+        return None
+        
+        
+    def rgb_diff(self, im_1, im_2):
+        with Image.open(im_1) as etalon:
+            with Image.open(im_2) as target:
+                if etalon.size[1] > target.size[1]:
+                    target = target.resize(etalon.size)
+                else:
+                    etalon = etalon.resize(target.size)
+                return ImageChops.difference(etalon.convert('RGB'), target.convert('RGB'))
         return None
         
 
